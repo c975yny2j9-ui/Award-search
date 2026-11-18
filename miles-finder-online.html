@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Miles Sweet Spot Finder</title>
+<style>
+:root{--bg:#0f172a;--card:#1e293b;--accent:#38bdf8;--best:#10b981;--text:#f8fafc;--muted:#94a3b8;--border:#334155;--warn:#fbbf24;--input:#0f172a;box-sizing:border-box;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:light){:root{--bg:#f1f5f9;--card:#fff;--accent:#0369a1;--best:#047857;--text:#0f172a;--muted:#475569;--border:#cbd5e1;--warn:#b45309;--input:#f8fafc}}
+*{box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+body{margin:0;padding:20px 16px 48px;background:var(--bg);color:var(--text);max-width:640px;margin-inline:auto}
+h1{font-size:1.4rem;margin:0 0 4px}
+.sub{color:var(--muted);font-size:.85rem;margin:0 0 14px}
+.tabs{display:flex;gap:6px;background:var(--card);padding:4px;border-radius:12px;border:1px solid var(--border);margin-bottom:14px}
+.tab{flex:1;padding:10px;border:0;border-radius:9px;background:none;color:var(--muted);font-weight:700;font-size:.9rem}
+.tab.on{background:var(--accent);color:#06283d}
+.controls{background:var(--card);padding:14px;border-radius:14px;display:flex;flex-direction:column;gap:10px;margin-bottom:14px;border:1px solid var(--border)}
+label{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+select{width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--border);background:var(--input);color:var(--text);font-size:.95rem;margin-top:4px}
+.card{background:var(--card);border-radius:14px;padding:14px;margin-bottom:10px;border:1px solid var(--border)}
+.card.low{border:2px solid var(--best)}
+.badge{display:inline-block;background:var(--best);color:#fff;font-size:.68rem;font-weight:800;padding:3px 8px;border-radius:99px;margin-bottom:6px;text-transform:uppercase}
+.top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.prog{font-weight:700;color:var(--text);text-decoration:none}
+.pts{font-size:1.15rem;font-weight:800;color:var(--accent);white-space:nowrap}
+.low .pts{color:var(--best)}
+.flt{font-size:.88rem;margin-top:4px}
+.note{font-size:.78rem;color:var(--muted);margin-top:6px;line-height:1.4}
+a.go{display:inline-block;margin-top:8px;padding:6px 10px;color:var(--accent);text-decoration:none;font-size:.8rem;font-weight:600;border-radius:8px;border:1px solid var(--border)}
+.hd{display:flex;justify-content:space-between;align-items:center;margin:16px 0 8px;font-weight:800}
+.d{font-size:.8rem;font-weight:700;padding:3px 8px;border-radius:99px}
+.d.save{background:rgba(16,185,129,.18);color:var(--best)}
+.d.more{background:rgba(251,191,36,.18);color:var(--warn)}
+.d.base{background:var(--border);color:var(--muted)}
+.hero{border:2px solid var(--best);background:var(--card);border-radius:14px;padding:14px;margin-bottom:6px;font-size:.92rem;line-height:1.45}
+.warn{font-size:.75rem;color:var(--warn);line-height:1.4;margin-top:14px}
+.empty{text-align:center;color:var(--muted);padding:20px;font-size:.9rem}
+</style>
+</head>
+<body>
+<h1>✈️ Miles Sweet Spot Finder</h1>
+<p class="sub">Lowest one-way award prices by programme. Availability not checked.</p>
+
+<div class="tabs">
+  <button class="tab on" id="t-sin" onclick="setTab('sin')">Default · From Singapore</button>
+  <button class="tab" id="t-near" onclick="setTab('near')">Nearby</button>
+</div>
+
+<div class="controls">
+  <div><label for="dest">Destination</label><select id="dest" onchange="render()"></select></div>
+  <div><label for="cabin">Cabin</label>
+    <select id="cabin" onchange="render()">
+      <option value="e">Economy</option><option value="b" selected>Business</option><option value="f">First / Suites</option>
+    </select></div>
+  <div id="pf"><label for="prog">Programme</label><select id="prog" onchange="render()"></select></div>
+</div>
+
+<div id="out"></div>
+<p class="warn" id="warn"></p>
+<details class="card"><summary class="prog">Update data</summary>
+<div class="note" id="st"></div>
+<input id="src" placeholder="https://…/data.json" style="width:100%;margin-top:8px;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--input);color:var(--text)">
+<a class="go" href="#" onclick="refresh();return false">Update now</a> <a class="go" href="#" onclick="copyData();return false">Copy current data</a>
+</details>
+
+<script>
+// code: [name, site, how SG cards reach it (as listed on suitesmile.com; table ticks for other banks weren’t readable)]
+const P={
+ KF:["SIA KrisFlyer","https://www.singaporeair.com/","HSBC (−17%)"],
+ AM:["Cathay Asia Miles","https://www.cathaypacific.com/","OCBC (−28%), Trust via HeyMax"],
+ EVA:["EVA Infinity MileageLands","https://www.evaair.com/","Trust via HeyMax"],
+ AV:["Avios (Qatar / BA)","https://www.qatarairways.com/","HSBC & AMEX via BA, Trust via HeyMax"],
+ FB:["Flying Blue (AF/KLM)","https://www.flyingblue.com/","Trust via HeyMax"],
+ TK:["Turkish Miles&Smiles","https://www.turkishairlines.com/","HSBC (−29%), Trust via HeyMax"],
+ EN:["Malaysia Airlines Enrich","https://www.malaysiaairlines.com/","Trust via HeyMax"],
+ AC:["Air Canada Aeroplan","https://www.aircanada.com/",""],
+ ANA:["ANA Mileage Club","https://www.ana.co.jp/",""],
+ LM:["Avianca LifeMiles","https://www.lifemiles.com/",""],
+ AS:["Alaska Mileage Plan","https://www.alaskaair.com/",""],
+ VS:["Virgin Atlantic Flying Club","https://flywith.virginatlantic.com/",""]
+};
+const O={SIN:"Singapore",KUL:"Malaysia (Kuala Lumpur)",BKK:"Thailand (Bangkok)",CGK:"Indonesia (Jakarta)",HKG:"Hong Kong"};
+const DN={BKK:"Bangkok",DPS:"Bali",HAN:"Hanoi / Ho Chi Minh",HKG:"Hong Kong",TPE:"Taipei",TYO:"Tokyo",ICN:"Seoul",SYD:"Sydney / Melbourne",AKL:"Auckland",LHR:"London",CDG:"Paris",FRA:"Frankfurt",SFO:"San Francisco / Los Angeles",JFK:"New York"};
+const GR={"Southeast Asia":["BKK","DPS","HAN"],"North Asia":["HKG","TPE","TYO","ICN"],"Oceania":["SYD","AKL"],"Europe":["LHR","CDG","FRA"],"North America":["SFO","JFK"]};
+const NEAR_DEST=["TYO","SYD","LHR","SFO"];
+// "program|flight|points;..." per origin → destination → cabin (e/b/f)
+const D0={
+SIN:{
+ BKK:{e:"AV|MH / CX partner flights|11000;KF|SQ direct|13500;LM|TG / SQ|15000",b:"KF|SQ direct|24000;LM|TG / SQ|25000;AC|SQ / TG|25000"},
+ DPS:{e:"KF|SQ direct|8500;FB|KLM direct (5th freedom)|10000;AC|SQ direct|12500",b:"KF|SQ direct|21000;AC|SQ direct|25000;FB|KLM direct|29000"},
+ HAN:{e:"KF|SQ direct (HAN/SGN)|13500;LM|SQ direct|15000",b:"KF|SQ direct|24000;AC|SQ direct|25000"},
+ HKG:{e:"AM|CX direct|12500;AV|CX direct|13000;KF|SQ direct|16500",b:"AM|CX direct|28000;AV|CX direct|31000;KF|SQ direct|34000",f:"KF|SQ direct (select B777)|45000"},
+ TPE:{e:"AM|CX via HKG|12500;KF|SQ direct|16500;EVA|BR direct|17500",b:"EVA|BR direct (Royal Laurel)|25000;KF|SQ direct|34000;AC|BR / SQ|45000"},
+ TYO:{e:"AM|JL direct (HND/NRT)|20000;AV|JL direct|22000;KF|SQ direct|27000;ANA|NH / SQ|35000",b:"ANA|NH / SQ|43000;VS|NH direct|45000;KF|SQ direct (A350/B777)|52000;AM|JL direct (Sky Suite)|58000;AS|JL direct|60000",f:"ANA|NH The Suite|68000;KF|SQ direct (B777-300ER)|77000;AM|JL First to HND|85000"},
+ ICN:{e:"KF|SQ direct|27000;AM|CX via HKG|27000",b:"ANA|OZ / SQ|43000;KF|SQ direct|52000;AC|OZ / SQ|60000"},
+ SYD:{e:"AV|QF direct|22000;KF|SQ direct|30500",b:"AV|QF direct|62000;AC|SQ direct|65000;KF|SQ direct|68500",f:"KF|SQ direct (A380 Suites / First)|93500;AV|QF First|103000"},
+ AKL:{e:"KF|SQ / NZ direct|30500;AC|NZ / SQ|45000",b:"KF|SQ / NZ direct|68500;AC|NZ / SQ|80000"},
+ LHR:{e:"AV|QR via DOH|35000;KF|SQ direct|42000;FB|AF/KLM via CDG/AMS|45000",b:"AV|QR via DOH (Qsuite)|75000;AC|SQ / LH / LX|87500;FB|AF/KLM via CDG/AMS|90000;KF|SQ direct|103500",f:"KF|SQ direct (Suites / First)|141000"},
+ CDG:{e:"AV|QR via DOH|35000;KF|SQ direct|42000;FB|AF direct|45000",b:"AV|QR via DOH (Qsuite)|75000;AC|SQ / LX / LH|87500;FB|AF direct|90000;KF|SQ direct|103500",f:"KF|SQ direct First|141000"},
+ FRA:{e:"AV|QR via DOH|35000;KF|SQ direct|42000",b:"AV|QR via DOH|75000;AC|SQ / LH|87500;KF|SQ direct|103500",f:"KF|SQ direct (Suites / First)|141000"},
+ SFO:{e:"KF|SQ direct|44000;AC|UA / SQ|50000",b:"AC|SQ / UA / BR|87500;KF|SQ direct|107000;AM|CX via HKG|110000",f:"KF|SQ First (B777-300ER)|148000"},
+ JFK:{e:"KF|SQ direct|44000;AC|SQ / UA|60000",b:"KF|SQ direct|111500;AC|SQ / BR|115000;AM|CX via HKG|115000",f:"KF|SQ Suites / First|156500"}
+},
+// Nearby origins: estimates from published award charts; verify before relocating or booking
+KUL:{
+ TYO:{e:"AM|JL / CX via HKG|22000;EN|MH direct|26000;AC|BR via TPE|35000",b:"EVA|BR via TPE|50000;EN|MH direct|55000;AM|JL / CX via HKG|58000"},
+ SYD:{e:"AV|QF direct|22000;EN|MH direct|25000;AM|QF direct|30000",b:"EN|MH direct|55000;AM|QF direct|60000;AV|QF direct|62000"},
+ LHR:{e:"AV|QR via DOH|35000;EN|MH direct|40000;TK|TK via IST|45000",b:"AV|QR via DOH|75000;EN|MH direct|75000;TK|TK via IST|90000"},
+ SFO:{e:"AM|CX via HKG|35000;AC|BR via TPE|50000",b:"AM|CX via HKG|75000;AC|BR via TPE|87500"}
+},
+BKK:{
+ TYO:{e:"EVA|BR via TPE|20000;AM|CX via HKG|22000;AV|JL direct|22000",b:"EVA|BR via TPE|42000;AM|JL direct|58000;AC|TG / NH|60000"},
+ SYD:{e:"AC|TG direct|40000;AM|CX via HKG|42000",b:"AC|TG direct|75000;AM|CX via HKG|85000"},
+ LHR:{e:"AV|QR via DOH|35000;TK|TK via IST|40000;FB|AF/KLM via CDG|50000",b:"AV|QR via DOH|75000;FB|AF/KLM via CDG|80000;TK|TK via IST|85000"},
+ SFO:{e:"AM|CX via HKG|35000;AC|BR via TPE|50000",b:"EVA|BR via TPE|85000;AC|BR via TPE|87500;AM|CX via HKG|90000"}
+},
+CGK:{
+ TYO:{e:"AM|CX via HKG|25000;EVA|BR via TPE|27000",b:"EVA|BR via TPE|45000;AM|CX via HKG|60000"},
+ SYD:{e:"AV|QF direct|22000;AM|QF direct|30000",b:"AV|QF direct|62000;AM|QF direct|65000"},
+ LHR:{e:"AV|QR via DOH|35000;TK|TK via IST|40000",b:"AV|QR via DOH|75000;TK|TK via IST|90000"},
+ SFO:{e:"AM|CX via HKG|38000;EVA|BR via TPE|45000",b:"EVA|BR via TPE|85000;AM|CX via HKG|85000"}
+},
+HKG:{
+ TYO:{e:"AM|CX direct|12500;AV|CX direct|13000;EVA|BR via TPE|15000",b:"AM|CX direct|30000;AV|CX direct|31000;EVA|BR via TPE|35000"},
+ SYD:{e:"AM|CX direct|22000;AV|CX direct|22000",b:"AM|CX direct|58000;AV|CX direct|62000"},
+ LHR:{e:"AV|CX / BA direct|35000;AM|CX direct|45000",b:"AV|CX / BA direct|75000;AM|CX direct|85000"},
+ SFO:{e:"AM|CX direct|35000;AV|CX direct|40000",b:"AM|CX direct|75000;AV|CX direct|80000"}
+}};
+
+let D=D0,tab="sin";
+try{const c=JSON.parse(localStorage.getItem("mf")||"null");if(c&&c.D){D=c.D;if(c.P)Object.assign(P,c.P);}}catch(e){}
+const msg=t=>$("st").textContent=t;
+function stamp(){try{const c=JSON.parse(localStorage.getItem("mf")||"null");msg(c&&c.updated?"Data updated "+c.updated:"Built-in data (Nov 2026)")}catch(e){msg("Built-in data (Nov 2026)")}}
+async function refresh(){
+ const u=$("src").value.trim();if(!u)return msg("Paste your data.json link first");
+ try{localStorage.setItem("mfu",u)}catch(e){}
+ msg("Updating…");
+ try{const j=await(await fetch(u,{cache:"no-store"})).json();
+  if(!j.D||!j.D.SIN)throw 0;
+  D=j.D;if(j.P)Object.assign(P,j.P);
+  try{localStorage.setItem("mf",JSON.stringify(j))}catch(e){}
+  stamp();render();
+ }catch(e){msg("Couldn’t load that link. It must be a public JSON file.")}
+}
+function copyData(){const t=JSON.stringify({updated:new Date().toISOString().slice(0,10),D});navigator.clipboard.writeText(t).then(()=>msg("Data copied"),()=>msg("Copy failed"))}
+const $=id=>document.getElementById(id);
+const rows=(o,d,c)=>((D[o][d]||{})[c]||"").split(";").filter(Boolean).map(x=>{const[p,f,n]=x.split("|");return{p,f,n:+n}}).sort((a,b)=>a.n-b.n);
+const fmt=n=>n.toLocaleString("en-SG");
+
+function fillDest(){
+  const keep=$("dest").value;
+  const opt=d=>`<option value="${d}">${DN[d]} (${d})</option>`;
+  $("dest").innerHTML=tab==="sin"
+    ?Object.entries(GR).map(([g,l])=>`<optgroup label="${g}">${l.map(opt).join("")}</optgroup>`).join("")
+    :NEAR_DEST.map(opt).join("");
+  $("dest").value=[...$("dest").options].some(o=>o.value===keep)?keep:"TYO";
+}
+function setTab(t){
+  tab=t;$("t-sin").classList.toggle("on",t==="sin");$("t-near").classList.toggle("on",t==="near");
+  $("pf").style.display=t==="sin"?"":"none";
+  fillDest();render();
+}
+function card(r,i,best){
+  const [name,url,via]=P[r.p];
+  return `<div class="card ${i===0?"low":""}">${i===0&&best?'<span class="badge">Lowest</span>':""}
+  <div class="top"><a class="prog" href="${url}" target="_blank" rel="noopener">${name} ↗</a><span class="pts">${fmt(r.n)}</span></div>
+  <div class="flt">✈ ${r.f}</div></div>`;
+}
+function render(){
+  const d=$("dest").value,c=$("cabin").value,out=$("out");
+  if(tab==="sin"){
+    const f=$("prog").value;
+    let r=rows("SIN",d,c).filter(x=>f==="ALL"||x.p===f);
+    $("warn").textContent="Saver-level one-way prices. Check the airline site for live prices.";
+    out.innerHTML=r.length?r.slice(0,3).map((x,i)=>card(x,i,true)).join("")
+      :'<div class="empty">No data for this cabin/programme. Try another cabin or “All programmes”.</div>';
+    return;
+  }
+  const base=(rows("SIN",d,c)[0]||{}).n;
+  const groups=Object.keys(O).map(o=>({o,r:rows(o,d,c).slice(0,3)})).filter(g=>g.r.length).sort((a,b)=>a.r[0].n-b.r[0].n);
+  if(!groups.length){out.innerHTML='<div class="empty">No nearby data for this cabin. Try Economy or Business.</div>';return}
+  const top=groups[0],diff=base&&top.o!=="SIN"?base-top.r[0].n:0;
+  const hero=top.o==="SIN"?`Singapore is already the cheapest start point for ${DN[d]}.`
+    :diff>0?`Starting from <b>${O[top.o]}</b> is cheapest: <b>${fmt(top.r[0].n)}</b> pts, ${fmt(diff)} less than from Singapore.`
+    :`Best nearby start: <b>${O[top.o]}</b> at <b>${fmt(top.r[0].n)}</b> pts.`;
+  out.innerHTML=`<div class="hero">${hero}</div>`+groups.map(g=>{
+    const dl=g.o==="SIN"?'<span class="d base">Baseline</span>':base?(g.r[0].n<base?`<span class="d save">−${fmt(base-g.r[0].n)} vs SIN</span>`:g.r[0].n>base?`<span class="d more">+${fmt(g.r[0].n-base)} vs SIN</span>`:'<span class="d base">Same as SIN</span>'):"";
+    return `<div class="hd"><span>${O[g.o]}</span>${dl}</div>`+g.r.map((x,i)=>card(x,i,false)).join("");
+  }).join("");
+  $("warn").textContent="Nearby prices are estimates and exclude the cost of getting there.";
+}
+$("prog").innerHTML='<option value="ALL">All programmes</option>'+Object.entries(P).map(([k,v])=>`<option value="${k}">${v[0]}</option>`).join("");
+try{$("src").value=localStorage.getItem("mfu")||""}catch(e){}
+fillDest();$("dest").value="TYO";render();stamp();
+</script>
+</body>
+</html>
